@@ -4,11 +4,11 @@ import { Logo } from "@/shared/components/icons/logotype";
 import { Symbol } from "@/shared/components/icons/symbol";
 import { ConnectWallet } from "@/features/wallet/components/ConnectWallet";
 import { useEffect, useRef } from "react";
-import { useVerificationStore } from "@/features/verifications/store/verification-store";
+import { useScoreExplanation } from "@/features/scoring/hooks";
 
 export function HeroSection() {
     const videoRef = useRef<HTMLVideoElement>(null);
-    const { totalPoints } = useVerificationStore();
+    const { totalScore } = useScoreExplanation();
 
     useEffect(() => {
         const video = videoRef.current;
@@ -73,7 +73,7 @@ export function HeroSection() {
                                     
                                     <div className="flex items-center justify-center gap-6">
                                         <Symbol size="xxxl" className="text-white" />
-                                        <div className="text-8xl font-bold text-white">{totalPoints}</div>
+                                        <div className="text-8xl font-bold text-white">{Math.round(totalScore)}</div>
                                     </div>
                                 </div>
                             </Card>
