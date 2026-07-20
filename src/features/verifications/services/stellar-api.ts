@@ -129,6 +129,32 @@ class StellarApiService {
   }
 
   /**
+   * Best-effort account age proxy. Horizon doesn't expose account-creation
+   * time on /accounts/{id} directly, so this reads the account's oldest
+   * transaction (ascending order, limit 1) as a lower-bound for when the
+   * account became active. Returns null for accounts with no transactions.
+   */
+  async getAccountCreatedAt(accountId: string): Promise<string | null> {
+    try {
+      const response = await fetch(
+        `${this.baseUrl}/accounts/${accountId}/transactions?order=asc&limit=1`
+      );
+      if (!response.ok) {
+        return null;
+      }
+      const data = await response.json();
+      const records = data.records || data._embedded?.records;
+      if (!records || !Array.isArray(records) || records.length === 0) {
+        return null;
+      }
+      return records[0].created_at as string;
+    } catch (error) {
+      console.error('Error getting account creation date:', error);
+      return null;
+    }
+  }
+
+  /**
    * Get account operations
    */
   async getAccountOperations(accountId: string, limit: number = 10): Promise<StellarOperation[]> {
