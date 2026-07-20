@@ -2,7 +2,7 @@
 
 import { Badge } from "@/shared/ui/badge";
 import { Clock } from "lucide-react";
-import type { RecentActivityItem } from "@/features/verifications/services/verification-summary";
+import type { RecentActivityItem } from "@/features/scoring/legacy";
 
 interface RecentActivityProps {
   activity: RecentActivityItem[];

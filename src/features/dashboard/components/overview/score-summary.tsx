@@ -3,7 +3,7 @@
 import { Symbol } from "@/shared/components/icons/symbol";
 import { Badge } from "@/shared/ui/badge";
 import { CheckCircle2, Sparkles, Target } from "lucide-react";
-import type { VerificationSummary } from "@/features/verifications/services/verification-summary";
+import type { VerificationSummary } from "@/features/scoring/legacy";
 
 interface ScoreSummaryProps {
   summary: VerificationSummary;

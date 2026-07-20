@@ -2,7 +2,7 @@
 
 import { Badge } from "@/shared/ui/badge";
 import { ArrowRight, Trophy } from "lucide-react";
-import type { NextBestActionItem } from "@/features/verifications/services/verification-summary";
+import type { NextBestActionItem } from "@/features/scoring/legacy";
 
 interface NextBestActionProps {
   actions: NextBestActionItem[];
