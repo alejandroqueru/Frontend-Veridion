@@ -2,11 +2,11 @@
 import { Card } from "@/shared/ui/card";
 import { Symbol } from "@/shared/components/icons/symbol";
 import { useEffect, useRef } from "react";
-import { useVerificationStore } from "@/features/verifications/store/verification-store";
+import { useScoreExplanation } from "@/features/scoring/hooks";
 
 export function HumanityScoreCard() {
     const videoRef = useRef<HTMLVideoElement>(null);
-    const { totalPoints } = useVerificationStore();
+    const { totalScore } = useScoreExplanation();
 
     useEffect(() => {
         const video = videoRef.current;
@@ -54,7 +54,7 @@ export function HumanityScoreCard() {
             <div className="relative z-10 flex flex-col items-center justify-center h-full">
                 <div className="text-white flex items-center justify-center gap-2 mb-2">
                     <Symbol size="xxl" />
-                    <div className="text-4xl sm:text-4xl lg:text-[44px] font-bold">{totalPoints}</div>
+                    <div className="text-4xl sm:text-4xl lg:text-[44px] font-bold">{Math.round(totalScore)}</div>
                 </div>
                 <div className="text-sm sm:text-sm lg:text-lg text-white/80 text-center">Humanity points</div>
             </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import type { CategorySummary } from "@/features/verifications/services/verification-summary";
+import type { CategorySummary } from "@/features/scoring/legacy";
 
 interface CategoryBreakdownProps {
   categories: CategorySummary[];

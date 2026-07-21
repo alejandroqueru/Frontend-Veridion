@@ -2,14 +2,16 @@
 
 import { SectionContainer } from "@/shared/components/section-container";
 import { BarChart3 } from "lucide-react";
-import { useVerificationSummary } from "@/features/verifications/hooks/use-verification-summary";
+import { useHumanScoreSummary, useScoreExplanation } from "@/features/scoring/hooks";
+import { ContributionBreakdown, VerificationHistoryTimeline, ScoreSimulator } from "@/features/scoring/components";
 import { ScoreSummary } from "./overview/score-summary";
 import { CategoryBreakdown } from "./overview/category-breakdown";
 import { NextBestAction } from "./overview/next-best-action";
 import { RecentActivity } from "./overview/recent-activity";
 
 export function DashboardOverview() {
-  const summary = useVerificationSummary();
+  const summary = useHumanScoreSummary();
+  const explanation = useScoreExplanation();
 
   return (
     <div className="mb-6 sm:mb-8">
@@ -43,6 +45,24 @@ export function DashboardOverview() {
               isEmpty={summary.isEmpty}
             />
           </div>
+        </div>
+      </SectionContainer>
+
+      <SectionContainer className="p-3 sm:p-4 lg:p-6 mt-6">
+        <div className="mb-4 sm:mb-6">
+          <h3 className="text-sm sm:text-base font-semibold text-white">Score explainability</h3>
+          <p className="text-xs sm:text-[13px] text-gray-text mt-0.5">
+            How each verification contributes to your score, and its full history
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <ContributionBreakdown explanation={explanation} />
+          <VerificationHistoryTimeline explanation={explanation} />
+        </div>
+
+        <div className="mt-6">
+          <ScoreSimulator />
         </div>
       </SectionContainer>
     </div>
