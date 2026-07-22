@@ -14,10 +14,9 @@ interface GitHubUser {
   followers?: number;
 }
 
-export async function exchangeCodeForToken(code: string): Promise<string> {
+export async function exchangeCodeForToken(code: string, redirectUri: string): Promise<string> {
   const clientId = process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID;
   const clientSecret = process.env.GITHUB_CLIENT_SECRET;
-  const redirectUri = 'http://localhost:3000/callback';
 
   if (!clientId || !clientSecret) {
     throw new Error('GitHub OAuth not configured');
@@ -62,8 +61,8 @@ export async function getUserData(accessToken: string): Promise<GitHubUser> {
   return user;
 }
 
-export async function authenticateWithGitHub(code: string): Promise<GitHubUser> {
-  const accessToken = await exchangeCodeForToken(code);
+export async function authenticateWithGitHub(code: string, redirectUri: string): Promise<GitHubUser> {
+  const accessToken = await exchangeCodeForToken(code, redirectUri);
   const user = await getUserData(accessToken);
   return user;
 }

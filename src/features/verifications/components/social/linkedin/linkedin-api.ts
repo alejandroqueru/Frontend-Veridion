@@ -26,10 +26,9 @@ interface LinkedInUser {
   emailAddress?: string;
 }
 
-export async function exchangeCodeForToken(code: string): Promise<string> {
+export async function exchangeCodeForToken(code: string, redirectUri: string): Promise<string> {
   const clientId = process.env.NEXT_PUBLIC_LINKEDIN_CLIENT_ID;
   const clientSecret = process.env.LINKEDIN_CLIENT_SECRET;
-  const redirectUri = 'http://localhost:3000/callback';
 
   if (!clientId || !clientSecret) {
     throw new Error('LinkedIn OAuth not configured');
@@ -74,8 +73,8 @@ export async function getUserData(accessToken: string): Promise<LinkedInUser> {
   return user;
 }
 
-export async function authenticateWithLinkedIn(code: string): Promise<LinkedInUser> {
-  const accessToken = await exchangeCodeForToken(code);
+export async function authenticateWithLinkedIn(code: string, redirectUri: string): Promise<LinkedInUser> {
+  const accessToken = await exchangeCodeForToken(code, redirectUri);
   const user = await getUserData(accessToken);
   return user;
 }
