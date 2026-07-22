@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { Button } from '@/shared/ui/button';
 import { GoogleIcon } from '@/shared/components/icons/social-icons';
 import { useVerificationStore } from '../../../store/verification-store';
+import { useSynchronousVerification } from '../../../hooks/use-synchronous-verification';
+import { VerificationStatusAnnouncer } from '../../shared/verification-status';
 
 interface GoogleAuthProps {
   onSuccess?: (user: unknown) => void;
@@ -23,100 +25,84 @@ declare global {
   }
 }
 
-export function GoogleAuth({ onSuccess, onError }: GoogleAuthProps) {
-  const [isLoading, setIsLoading] = useState(false);
-  const [isGoogleLoaded, setIsGoogleLoaded] = useState(false);
-  const { completeVerification, isVerificationCompleted } = useVerificationStore();
+const POINTS = 6;
 
-  const handleCredentialResponse = useCallback((response: { credential: string }) => {
-    setIsLoading(true);
-    
-    try {
-      // Import the Google API function dynamically
-      import('./google-api').then(({ decodeGoogleJWT }) => {
-        const payload = decodeGoogleJWT(response.credential);
-        
-        // Complete the verification
-        completeVerification('google', 'social', 6);
-        
-        // Call success callback
-        onSuccess?.(payload);
-        console.log('Google authentication successful:', payload);
-      });
-    } catch (error) {
-      console.error('Google authentication error:', error);
-      onError?.(error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [completeVerification, onSuccess, onError]);
+export function GoogleAuth({ onSuccess, onError }: GoogleAuthProps) {
+  const [isGoogleLoaded, setIsGoogleLoaded] = useState(false);
+  const completeVerification = useVerificationStore((state) => state.completeVerification);
+  // No pending_external here: Google's Identity Services flow completes
+  // within the same page (popup/One Tap), so there's no browser navigation
+  // to resume after — unlike GitHub/Discord/LinkedIn.
+  const { status, error, begin, succeed, fail, retry } = useSynchronousVerification('google');
+
+  const handleCredentialResponse = useCallback(
+    (response: { credential: string }) => {
+      begin();
+      import('./google-api')
+        .then(({ decodeGoogleJWT }) => {
+          const payload = decodeGoogleJWT(response.credential);
+          completeVerification('google', 'social', POINTS);
+          succeed();
+          onSuccess?.(payload);
+        })
+        .catch((err) => {
+          const message = err instanceof Error ? err.message : 'Google authentication failed';
+          fail(message);
+          onError?.(err);
+        });
+    },
+    [begin, completeVerification, succeed, fail, onSuccess, onError],
+  );
 
   useEffect(() => {
-    console.log('Loading Google Identity Services...');
-    
-    // Force English locale BEFORE loading the script
     const meta = document.createElement('meta');
     meta.name = 'google-signin-locale';
     meta.content = 'en';
     document.head.appendChild(meta);
-    
-    // Also set the language attribute on the script
+
     const script = document.createElement('script');
     script.src = 'https://accounts.google.com/gsi/client?hl=en';
     script.async = true;
     script.defer = true;
 
     script.onload = () => {
-      console.log('Google script loaded successfully');
-      if (window.google) {
-        const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-        console.log('Google Client ID:', clientId);
-        console.log('Current origin:', window.location.origin);
-        
-        try {
-          window.google.accounts.id.initialize({
-            client_id: clientId || 'your-google-client-id',
-            callback: handleCredentialResponse,
-          });
-          console.log('Google initialized successfully');
-          setIsGoogleLoaded(true);
-          
-          // Render the Google button with a longer delay to ensure English locale
-          setTimeout(() => {
-            const buttonContainer = document.getElementById('google-signin-button');
-            if (buttonContainer) {
-              // Clear any existing content
-              buttonContainer.innerHTML = '';
-              
-              window.google.accounts.id.renderButton(buttonContainer, {
-                theme: 'outline',
-                size: 'large',
-                text: 'signin_with',
-                width: '300',
-                locale: 'en'
-              });
-              
-              // Add custom styling to make the button more rounded
-              setTimeout(() => {
-                const googleButton = buttonContainer.querySelector('div[role="button"]');
-                if (googleButton) {
-                  (googleButton as HTMLElement).style.borderRadius = '9999px';
-                }
-              }, 100);
-              
-              console.log('Google button rendered');
-            }
-          }, 200);
-        } catch (error) {
-          console.error('Error initializing Google:', error);
-        }
-      } else {
-        console.error('window.google not available after script load');
-      }
-    };
+      if (!window.google) return;
 
-    script.onerror = (error) => {
-      console.error('Error loading Google script:', error);
+      const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+
+      try {
+        window.google.accounts.id.initialize({
+          client_id: clientId || 'your-google-client-id',
+          callback: handleCredentialResponse,
+        });
+        setIsGoogleLoaded(true);
+
+        setTimeout(() => {
+          const buttonContainer = document.getElementById('google-signin-button');
+          if (buttonContainer) {
+            buttonContainer.innerHTML = '';
+
+            window.google.accounts.id.renderButton(buttonContainer, {
+              theme: 'outline',
+              size: 'large',
+              text: 'signin_with',
+              width: '300',
+              locale: 'en',
+            });
+
+            setTimeout(() => {
+              const googleButton = buttonContainer.querySelector('div[role="button"]');
+              if (googleButton) {
+                (googleButton as HTMLElement).style.borderRadius = '9999px';
+              }
+            }, 100);
+          }
+        }, 200);
+      } catch {
+        // Google's script loaded but initialization failed (e.g. malformed
+        // client ID) — surfaced to the user via the button staying in its
+        // "Loading Google…" disabled state rather than a thrown error.
+      }
     };
 
     document.head.appendChild(script);
@@ -125,7 +111,6 @@ export function GoogleAuth({ onSuccess, onError }: GoogleAuthProps) {
       if (document.head.contains(script)) {
         document.head.removeChild(script);
       }
-      // Remove the meta tag
       const existingMeta = document.querySelector('meta[name="google-signin-locale"]');
       if (existingMeta) {
         document.head.removeChild(existingMeta);
@@ -133,10 +118,7 @@ export function GoogleAuth({ onSuccess, onError }: GoogleAuthProps) {
     };
   }, [handleCredentialResponse]);
 
-
-  const isCompleted = isVerificationCompleted('google');
-
-  if (isCompleted) {
+  if (status === 'verified') {
     return (
       <div className="flex items-center gap-2 text-green-400">
         <div className="w-2 h-2 bg-green-400 rounded-full"></div>
@@ -146,26 +128,28 @@ export function GoogleAuth({ onSuccess, onError }: GoogleAuthProps) {
   }
 
   return (
-    <div className="w-full">
-      {isLoading ? (
-        <Button
-          disabled
-          className="w-full bg-white hover:bg-gray-100 text-gray-900 border border-gray-300 rounded-full"
-        >
-          <GoogleIcon size={20} className="mr-2" />
-          Verifying...
-        </Button>
-      ) : isGoogleLoaded ? (
-        <div id="google-signin-button" className="w-full flex justify-center min-h-[48px]"></div>
-      ) : (
-        <Button
-          disabled
-          className="w-full bg-white hover:bg-gray-100 text-gray-900 border border-gray-300 rounded-full"
-        >
-          <GoogleIcon size={20} className="mr-2" />
-          Loading Google...
-        </Button>
-      )}
+    <div className="w-full space-y-3">
+      <VerificationStatusAnnouncer
+        status={status}
+        connectingMessage="Verifying with Google…"
+        errorMessage={error}
+        onRetry={retry}
+      />
+
+      {status !== 'failed' &&
+        (status === 'connecting' ? (
+          <Button disabled className="w-full bg-white hover:bg-gray-100 text-gray-900 border border-gray-300 rounded-full">
+            <GoogleIcon size={20} className="mr-2" />
+            Verifying…
+          </Button>
+        ) : isGoogleLoaded ? (
+          <div id="google-signin-button" className="w-full flex justify-center min-h-[48px]"></div>
+        ) : (
+          <Button disabled className="w-full bg-white hover:bg-gray-100 text-gray-900 border border-gray-300 rounded-full">
+            <GoogleIcon size={20} className="mr-2" />
+            Loading Google...
+          </Button>
+        ))}
     </div>
   );
 }
