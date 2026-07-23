@@ -105,19 +105,43 @@ Each key gets **60 requests per minute** (`api:<appId>`), enforced by the shared
 token-bucket in `src/features/verifications/services/rate-limiter.ts`. Exceeding
 it returns `429`.
 
+## Embeddable badge widget
+
+A drop-in "Verified by Veridion" badge for third-party sites.
+
+```html
+<div data-veridion-badge data-address="GABC...XYZ"></div>
+<script src="https://<host>/veridion-badge.js" async></script>
+```
+
+The loader replaces each element with an `<iframe>` pointing at
+`/embed/verification-badge?address=...`, so the badge is fully isolated from the
+host page (no data leaks in either direction). You can also embed that iframe
+directly.
+
+The badge is driven by a **public, unauthenticated** endpoint that returns only
+the verified/unverified state — never the Human Score or category detail — so no
+API key ever has to live in a third-party page:
+
+```
+GET /api/v1/public/verification-badge?address=G...   ->  { "verified": bool, "status": "verified"|"unverified" }
+```
+
+It is rate-limited per client IP (120/min). The badge degrades gracefully to a
+clear **verified / not verified / unavailable** state on any error.
+
 ## Roadmap (not yet implemented)
 
 These require a small amount of **durable server-side storage**, which the app
-does not have yet — they are intentionally out of scope for this first slice:
+does not have yet — they are intentionally out of scope for now:
 
 - **Verification data source.** `src/features/developer-api/verification-source.ts`
   is the single integration seam. It currently returns an empty history (so
   unknown addresses correctly read as `unverified`); wire a real event store
-  there and every endpoint starts returning live data.
+  there and every endpoint — API and badge — starts returning live data.
 - **User consent & revocation.** A key alone must not read a specific user's
   data — the user must grant consent, and revoking it must cut access
   immediately. Immediate revocation needs a durable revocation list.
-- **Embeddable "Verified by Veridion" widget** driven by this API.
 - **Webhooks** for verification-status changes, with signed payloads and
   retry/backoff.
 - **Shared rate-limit store** so limits survive restarts and span instances.
