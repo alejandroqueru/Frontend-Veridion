@@ -29,6 +29,7 @@ export function PhoneVerification({ onSuccess, onError, wallet }: Props) {
   const { completeVerification } = useVerificationStore();
 
   const { step, code, setCode, loading, error, cooldown, sendCode, verifyCode, reset } = useOtpFlow({
+    providerId: 'phone-verification',
     channel: 'phone',
     identifier: fullPhone,
     wallet,

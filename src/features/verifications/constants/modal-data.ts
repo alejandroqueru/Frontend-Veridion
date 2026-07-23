@@ -131,6 +131,77 @@ export const MODAL_DATA = {
       "Account must have at least 1 transaction",
       "Account must exist on Stellar network"
     ]
+  },
+  "government-id": {
+    title: "Verify your identity with a government ID",
+    points: "1000",
+    time: "2-3 minutes",
+    price: "Free",
+    status: "Physical Verification",
+    achievements: [
+      {
+        title: "Government ID Verified",
+        points: 1000,
+        description: "Prove your identity using a government-issued ID."
+      }
+    ],
+    requirements: [
+      "Must have a valid, unexpired government-issued ID",
+      "Full legal name must match the ID"
+    ]
+  },
+  binance: {
+    title: "Verify your Binance KYC status",
+    points: "1000",
+    time: "1-2 minutes",
+    price: "Free",
+    status: "Physical Verification",
+    achievements: [
+      {
+        title: "Binance KYC Verified",
+        points: 1000,
+        description: "Confirm your Binance KYC status via Binance Account Bound Token."
+      }
+    ],
+    requirements: [
+      "Must have completed KYC on Binance",
+      "Must have a valid Binance Account Bound Token (BABT)"
+    ]
+  },
+  biometrics: {
+    title: "Verify your uniqueness with biometrics",
+    points: "1000",
+    time: "1-2 minutes",
+    price: "Free",
+    status: "Physical Verification",
+    achievements: [
+      {
+        title: "Biometrics Verified",
+        points: 1000,
+        description: "Prove you are a unique human via a facial liveness check."
+      }
+    ],
+    requirements: [
+      "Must consent to a one-time facial liveness check",
+      "Requires a working camera"
+    ]
+  },
+  "proof-clean-hands": {
+    title: "Prove you're not on sanctions lists",
+    points: "1000",
+    time: "1-2 minutes",
+    price: "Free",
+    status: "Physical Verification",
+    achievements: [
+      {
+        title: "Clean Hands Verified",
+        points: 1000,
+        description: "Confirm you are not listed on any government sanctions list."
+      }
+    ],
+    requirements: [
+      "Must not appear on any government sanctions list"
+    ]
   }
 } as const;
 

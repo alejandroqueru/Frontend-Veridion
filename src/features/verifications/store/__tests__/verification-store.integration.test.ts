@@ -67,7 +67,7 @@ describe('useVerificationStore — real persist/localStorage integration', () =>
 
     const persisted = JSON.parse(localStorage.getItem('verification-storage') ?? '{}');
     expect(persisted.state.events).toHaveLength(1);
-    expect(persisted.version).toBe(2);
+    expect(persisted.version).toBe(3);
   });
 
   it('re-verifying an existing provider appends a new event instead of no-op-ing (fixes the old bug)', async () => {
@@ -76,6 +76,42 @@ describe('useVerificationStore — real persist/localStorage integration', () =>
     useVerificationStore.getState().completeVerification('github', 'social', 6);
 
     expect(useVerificationStore.getState().events).toHaveLength(2);
+  });
+
+  it('resuming: a pending_external machine survives a simulated browser close (fresh module import against the same localStorage)', async () => {
+    const { useVerificationStore } = await import('../verification-store');
+
+    useVerificationStore.getState().dispatchMachineEvent('github', { type: 'CONNECT' });
+    useVerificationStore.getState().dispatchMachineEvent('github', {
+      type: 'AWAIT_EXTERNAL',
+      nonce: 'resume-nonce',
+      context: { redirectUri: 'https://example.com/dashboard' },
+    });
+
+    expect(useVerificationStore.getState().getMachineState('github').status).toBe('pending_external');
+
+    // Simulate the browser being closed and reopened: fresh module state,
+    // same underlying localStorage.
+    vi.resetModules();
+    const { useVerificationStore: reloaded } = await import('../verification-store');
+
+    const resumed = reloaded.getState().getMachineState('github');
+    expect(resumed.status).toBe('pending_external');
+    expect(resumed.nonce).toBe('resume-nonce');
+    expect(resumed.context).toEqual({ redirectUri: 'https://example.com/dashboard' });
+  });
+
+  it('completing a verification clears any in-flight machine for that provider', async () => {
+    const { useVerificationStore } = await import('../verification-store');
+
+    useVerificationStore.getState().dispatchMachineEvent('discord', { type: 'CONNECT' });
+    useVerificationStore.getState().dispatchMachineEvent('discord', { type: 'AWAIT_EXTERNAL', nonce: 'n' });
+    expect(useVerificationStore.getState().getMachineState('discord').status).toBe('pending_external');
+
+    useVerificationStore.getState().completeVerification('discord', 'social', 6);
+
+    expect(useVerificationStore.getState().getMachineState('discord').status).toBe('verified');
+    expect(useVerificationStore.getState().machines.discord).toBeUndefined();
   });
 
   it('a second session reading the same localStorage sees the already-migrated data without re-migrating', async () => {

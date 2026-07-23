@@ -25,6 +25,7 @@ export function EmailVerification({ onSuccess, onError, wallet }: Props) {
   const { completeVerification } = useVerificationStore();
 
   const { step, code, setCode, loading, error, cooldown, sendCode, verifyCode, reset } = useOtpFlow({
+    providerId: 'email-verification',
     channel: 'email',
     identifier: email,
     wallet,

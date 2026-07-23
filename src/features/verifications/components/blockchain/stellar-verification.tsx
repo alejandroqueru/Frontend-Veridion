@@ -9,6 +9,7 @@ import { Separator } from '@/shared/components/separator';
 import { StellarIcon } from '@/shared/components/icons/stellar-icon';
 import { stellarApi, stellarMainnetApi, StellarAccountInfo } from '../../services/stellar-api';
 import { useVerificationStore } from '../../store/verification-store';
+import { useSynchronousVerification } from '../../hooks/use-synchronous-verification';
 import { useWalletStore } from '@/features/wallet/store/wallet-store';
 import { fetchAndNormalizeStellarSignals } from '@/features/scoring/normalization';
 import { getSignal, type SignalBundle } from '@/features/scoring/types';
@@ -43,6 +44,7 @@ export const StellarVerification: React.FC<StellarVerificationProps> = ({ onComp
 
   const { recordVerificationEvent } = useVerificationStore();
   const { publicKey, isConnected, network } = useWalletStore();
+  const { begin, succeed, fail } = useSynchronousVerification('stellar-transactions');
 
   // Auto-fill with connected wallet if available
   React.useEffect(() => {
@@ -60,6 +62,7 @@ export const StellarVerification: React.FC<StellarVerificationProps> = ({ onComp
     setLoading(true);
     setError(null);
     setVerificationResult(null);
+    begin();
 
     try {
       // Use the appropriate API based on network
@@ -69,6 +72,7 @@ export const StellarVerification: React.FC<StellarVerificationProps> = ({ onComp
       const exists = await api.accountExists(accountId);
       if (!exists) {
         setError('Account not found on Stellar network');
+        fail('Account not found on Stellar network');
         setLoading(false);
         return;
       }
@@ -77,6 +81,7 @@ export const StellarVerification: React.FC<StellarVerificationProps> = ({ onComp
       const accountInfo = await api.getAccountInfo(accountId);
       if (!accountInfo) {
         setError('Could not retrieve account information');
+        fail('Could not retrieve account information');
         setLoading(false);
         return;
       }
@@ -119,16 +124,19 @@ export const StellarVerification: React.FC<StellarVerificationProps> = ({ onComp
       if (raw.transactionCount >= 1) {
         recordVerificationEvent('stellar-transactions', 'blockchain', { signals });
         setIsVerified(true);
+        succeed();
         onComplete?.(points, level, raw.transactionCount);
       } else {
-        onError?.('Account must have at least 1 transaction to complete verification');
+        const message = 'Account must have at least 1 transaction to complete verification';
+        fail(message);
+        onError?.(message);
       }
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An error occurred during verification';
       setError(errorMessage);
+      fail(errorMessage);
       onError?.(errorMessage);
-      console.error('Stellar verification error:', err);
     } finally {
       setLoading(false);
     }

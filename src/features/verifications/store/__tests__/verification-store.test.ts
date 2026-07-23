@@ -61,6 +61,60 @@ describe('migrateVerificationStorage', () => {
     expect(migrateVerificationStorage({ unexpected: true }, 0).events).toEqual([]);
   });
 
+  it('defaults machines to {} when migrating from a pre-v3 payload (no resumable state existed yet)', () => {
+    const migrated = migrateVerificationStorage({ events: [] }, 2);
+    expect(migrated.machines).toEqual({});
+  });
+
+  it('carries over a fresh pending_external machine from a v3 payload', () => {
+    const payload = {
+      events: [],
+      machines: {
+        github: {
+          status: 'pending_external',
+          nonce: 'abc',
+          startedAt: Date.now(),
+          retryCount: 0,
+          error: null,
+          context: {},
+        },
+      },
+    };
+    const migrated = migrateVerificationStorage(payload, 3);
+    expect(migrated.machines.github?.status).toBe('pending_external');
+    expect(migrated.machines.github?.nonce).toBe('abc');
+  });
+
+  it('drops a stale (long-abandoned) pending_external machine on migration', () => {
+    const payload = {
+      events: [],
+      machines: {
+        discord: {
+          status: 'pending_external',
+          nonce: 'old',
+          startedAt: Date.now() - 60 * 60 * 1000,
+          retryCount: 0,
+          error: null,
+          context: {},
+        },
+      },
+    };
+    const migrated = migrateVerificationStorage(payload, 3);
+    expect(migrated.machines.discord).toBeUndefined();
+  });
+
+  it('drops idle/verified machines on migration since they carry no resumable information', () => {
+    const payload = {
+      events: [],
+      machines: {
+        linkedin: { status: 'idle', nonce: null, startedAt: null, retryCount: 0, error: null, context: {} },
+        google: { status: 'verified', nonce: null, startedAt: null, retryCount: 0, error: null, context: {} },
+      },
+    };
+    const migrated = migrateVerificationStorage(payload, 3);
+    expect(migrated.machines).toEqual({});
+  });
+
   it('recomputes completedVerifications from events rather than trusting any persisted copy', () => {
     const staleShapeWithWrongDerivedData = {
       events: [

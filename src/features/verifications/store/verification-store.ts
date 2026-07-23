@@ -8,6 +8,13 @@ import {
   migrateLegacyStateToEvents,
   type LegacyPersistedState,
 } from '@/features/scoring/legacy';
+import {
+  createInitialMachineState,
+  isStalePending,
+  verificationMachineReducer,
+  type VerificationMachineEvent,
+  type VerificationMachineState,
+} from '../machine/verification-machine';
 
 export type VerificationType =
   | 'google'
@@ -42,6 +49,16 @@ export interface VerificationStatus {
 export interface VerificationState {
   events: VerificationEvent[];
   completedVerifications: Record<string, VerificationStatus>;
+  /**
+   * In-flight UX lifecycle per provider (idle/connecting/pending_external/
+   * verified/failed) — this is what makes an interrupted OAuth redirect or
+   * OTP round-trip resumable after the browser is closed and reopened.
+   * Kept separate from `events` (the scoring source of truth): a provider
+   * moves out of `machines` back to `idle` once its completion is recorded
+   * as an event, since `completedVerifications`/`events` become the
+   * canonical "verified" answer at that point.
+   */
+  machines: Record<string, VerificationMachineState>;
 
   /** General entry point — records an event with an arbitrary payload (e.g. a normalized Stellar SignalBundle). */
   recordVerificationEvent: (id: VerificationType, category: VerificationStatus['type'], rawPayload: unknown) => void;
@@ -51,6 +68,11 @@ export interface VerificationState {
   resetAllVerifications: () => void;
   isVerificationCompleted: (id: VerificationType) => boolean;
   getVerificationStatus: (id: VerificationType) => VerificationStatus | null;
+
+  /** Dispatches a lifecycle event to a single provider's machine instance. */
+  dispatchMachineEvent: (id: VerificationType, event: VerificationMachineEvent) => void;
+  /** Reads a provider's current machine state, defaulting to idle (and clearing stale pending_external attempts). */
+  getMachineState: (id: VerificationType) => VerificationMachineState;
 }
 
 function deriveCompletedVerifications(events: VerificationEvent[]): Record<string, VerificationStatus> {
@@ -76,6 +98,26 @@ function makeEventId(providerId: string): string {
 
 interface PersistedShape {
   events: VerificationEvent[];
+  machines: Record<string, VerificationMachineState>;
+}
+
+/**
+ * Drops any machine that is verified/idle (redundant with `events`) and any
+ * pending_external attempt old enough to be considered abandoned, so a
+ * long-dead redirect doesn't show as "waiting" forever. Called both on
+ * migration and on every rehydration.
+ */
+function sanitizeMachines(
+  machines: Record<string, VerificationMachineState> | undefined,
+  now: number,
+): Record<string, VerificationMachineState> {
+  const result: Record<string, VerificationMachineState> = {};
+  for (const [id, machine] of Object.entries(machines ?? {})) {
+    if (!machine || machine.status === 'idle' || machine.status === 'verified') continue;
+    if (isStalePending(machine, now)) continue;
+    result[id] = machine;
+  }
+  return result;
 }
 
 /**
@@ -87,7 +129,11 @@ interface PersistedShape {
 export function migrateVerificationStorage(
   persisted: unknown,
   version: number,
-): { events: VerificationEvent[]; completedVerifications: Record<string, VerificationStatus> } {
+): {
+  events: VerificationEvent[];
+  completedVerifications: Record<string, VerificationStatus>;
+  machines: Record<string, VerificationMachineState>;
+} {
   const events =
     (version ?? 0) < 2
       ? isLegacyPersistedState(persisted)
@@ -95,7 +141,10 @@ export function migrateVerificationStorage(
         : []
       : ((persisted as Partial<PersistedShape> | undefined)?.events ?? []);
 
-  return { events, completedVerifications: deriveCompletedVerifications(events) };
+  const machines =
+    (version ?? 0) < 3 ? {} : sanitizeMachines((persisted as Partial<PersistedShape> | undefined)?.machines, Date.now());
+
+  return { events, completedVerifications: deriveCompletedVerifications(events), machines };
 }
 
 export const useVerificationStore = create<VerificationState>()(
@@ -103,6 +152,7 @@ export const useVerificationStore = create<VerificationState>()(
     (set, get) => ({
       events: [],
       completedVerifications: {},
+      machines: {},
 
       recordVerificationEvent: (id, category, rawPayload) => {
         const event: VerificationEvent = {
@@ -115,7 +165,9 @@ export const useVerificationStore = create<VerificationState>()(
           source: 'live',
         };
         const events = [...get().events, event];
-        set({ events, completedVerifications: deriveCompletedVerifications(events) });
+        const machines = { ...get().machines };
+        delete machines[id];
+        set({ events, completedVerifications: deriveCompletedVerifications(events), machines });
       },
 
       completeVerification: (id, type, points) => {
@@ -124,11 +176,13 @@ export const useVerificationStore = create<VerificationState>()(
 
       resetVerification: (id) => {
         const events = get().events.filter((event) => event.providerId !== id);
-        set({ events, completedVerifications: deriveCompletedVerifications(events) });
+        const machines = { ...get().machines };
+        delete machines[id];
+        set({ events, completedVerifications: deriveCompletedVerifications(events), machines });
       },
 
       resetAllVerifications: () => {
-        set({ events: [], completedVerifications: {} });
+        set({ events: [], completedVerifications: {}, machines: {} });
       },
 
       isVerificationCompleted: (id) => {
@@ -138,21 +192,46 @@ export const useVerificationStore = create<VerificationState>()(
       getVerificationStatus: (id) => {
         return get().completedVerifications[id] ?? null;
       },
+
+      dispatchMachineEvent: (id, event) => {
+        const current = get().machines[id] ?? createInitialMachineState();
+        const next = verificationMachineReducer(current, event);
+        const machines = { ...get().machines };
+        if (next.status === 'idle') {
+          delete machines[id];
+        } else {
+          machines[id] = next;
+        }
+        set({ machines });
+      },
+
+      getMachineState: (id) => {
+        if (get().isVerificationCompleted(id)) {
+          return { ...createInitialMachineState(), status: 'verified' };
+        }
+        const machine = get().machines[id];
+        if (!machine) return createInitialMachineState();
+        if (isStalePending(machine)) return createInitialMachineState();
+        return machine;
+      },
     }),
     {
       name: 'verification-storage',
-      version: 2,
+      version: 3,
       migrate: migrateVerificationStorage,
-      partialize: (state): PersistedShape => ({ events: state.events }),
+      partialize: (state): PersistedShape => ({ events: state.events, machines: state.machines }),
       // `migrate` only runs on a version mismatch — a same-version reload
       // skips straight to a shallow merge, which would leave
       // `completedVerifications` at its initial `{}` value since it's
       // deliberately excluded from `partialize`. Recomputing it here on
       // every rehydration (migrated or not) keeps it always in sync with
-      // `events`, the single source of truth.
+      // `events`, the single source of truth. `machines` is sanitized the
+      // same way so a long-abandoned pending_external doesn't survive
+      // forever across reloads.
       onRehydrateStorage: () => (state) => {
         if (state) {
           state.completedVerifications = deriveCompletedVerifications(state.events);
+          state.machines = sanitizeMachines(state.machines, Date.now());
         }
       },
     },
