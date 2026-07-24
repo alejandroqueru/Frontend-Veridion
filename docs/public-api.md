@@ -158,18 +158,49 @@ implementation via `setConsentStore` for production — no other code changes.
 > Stellar wallet signature); otherwise anyone could grant/revoke on another
 > user's behalf.
 
+## Webhooks
+
+A registered app can subscribe to a subject's verification-status changes and
+receive a signed `POST` when they happen — only for subjects that have granted
+the app consent (revoking consent also stops webhooks). Requires the
+`manage:webhooks` scope.
+
+```
+POST   /api/v1/webhooks   { "subject": "G...", "url": "https://your.app/hook" }   -> 201, returns signing secret ONCE
+GET    /api/v1/webhooks                                                           -> list this app's subscriptions
+DELETE /api/v1/webhooks?id=<subscriptionId>                                       -> remove one
+```
+
+### Delivery & verification
+
+Each delivery is a `POST` with headers:
+
+```
+x-veridion-event: verification.status.changed
+x-veridion-timestamp: <epoch-ms>
+x-veridion-signature: sha256=<hex>
+```
+
+The signature is `HMAC-SHA256("<timestamp>.<raw-body>", <your subscription secret>)`.
+Recompute it on your side and compare to verify authenticity and integrity.
+
+Failed deliveries are retried with **exponential backoff** (e.g. 0.5s, 1s, 2s, 4s).
+
+Emit events from your own code via `emitVerificationChange(subject, { status })`
+(`src/features/developer-api/webhook-events.ts`) — wire it wherever a real
+verification changes.
+
 ## Roadmap (needs durable storage)
 
-These need the same kind of **durable server-side storage** and are the natural
-next steps once a store is chosen:
+Everything above works today; these swap the **in-memory demo stores for durable
+ones** and fill the last data gap:
 
 - **Verification data source.** `src/features/developer-api/verification-source.ts`
   is the single integration seam. It currently returns an empty history (so
   unknown addresses correctly read as `unverified`); wire a real event store
   there and every endpoint — API and badge — starts returning live data.
-- **Durable `ConsentStore`** (Redis/Postgres/KV) replacing the in-memory default.
-- **Webhooks** for verification-status changes, with signed payloads and
-  retry/backoff.
+- **Durable `ConsentStore` and `WebhookStore`** (Redis/Postgres/KV) replacing the
+  in-memory defaults, plus a persistent retry queue for webhook deliveries.
 - **Shared rate-limit store** so limits survive restarts and span instances.
 
 See issue #12 for the full feature description.

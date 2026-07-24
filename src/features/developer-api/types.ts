@@ -11,9 +11,10 @@
 /** Granular permissions a key can carry. Keep these coarse and additive. */
 export type ApiScope =
   | 'read:status' // may read a subject's verified/unverified status
-  | 'read:score'; // may additionally read the Human Score breakdown
+  | 'read:score' // may additionally read the Human Score breakdown
+  | 'manage:webhooks'; // may create/list/delete webhook subscriptions
 
-export const ALL_SCOPES: ApiScope[] = ['read:status', 'read:score'];
+export const ALL_SCOPES: ApiScope[] = ['read:status', 'read:score', 'manage:webhooks'];
 
 /** Claims embedded inside (and signed into) an API key. */
 export interface ApiKeyClaims {

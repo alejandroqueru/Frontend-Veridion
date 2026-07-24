@@ -11,7 +11,7 @@
 
 import { createHmac, randomUUID } from 'node:crypto';
 
-const VALID_SCOPES = ['read:status', 'read:score'];
+const VALID_SCOPES = ['read:status', 'read:score', 'manage:webhooks'];
 
 const secret = process.env.VERIDION_API_KEY_SECRET;
 if (!secret) {
