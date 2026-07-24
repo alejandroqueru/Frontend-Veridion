@@ -130,18 +130,44 @@ GET /api/v1/public/verification-badge?address=G...   ->  { "verified": bool, "st
 It is rate-limited per client IP (120/min). The badge degrades gracefully to a
 clear **verified / not verified / unavailable** state on any error.
 
-## Roadmap (not yet implemented)
+## User consent & revocation
 
-These require a small amount of **durable server-side storage**, which the app
-does not have yet — they are intentionally out of scope for now:
+A valid API key is **not** enough to read a specific subject's data — the subject
+must have explicitly authorized the app, and can revoke that at any time.
+
+- The authenticated `verification-status` endpoint checks consent for
+  `(appId, subject)` on every request and returns `403` when it is missing.
+- Users authorize/revoke via the consent screen (`/consent?appId=&appName=&subject=`)
+  or the consent API:
+
+  ```
+  POST   /api/v1/consent            { "appId": "...", "subject": "G..." }   grant
+  DELETE /api/v1/consent?appId=&subject=                                    revoke (immediate)
+  GET    /api/v1/consent?subject=                                           list a subject's grants
+  ```
+
+Consent is the one part of the API that **cannot be stateless** — immediate
+revocation requires durable, mutable state. It lives behind the
+`ConsentStore` interface (`src/features/developer-api/consent-store.ts`). The
+default implementation is **in-memory** (fine for a demo / single instance, but
+it does not survive restarts or span instances); swap in a durable
+implementation via `setConsentStore` for production — no other code changes.
+
+> DEMO NOTE: the consent API is not yet gated by user authentication. In
+> production these endpoints must verify the caller owns `subject` (e.g. a
+> Stellar wallet signature); otherwise anyone could grant/revoke on another
+> user's behalf.
+
+## Roadmap (needs durable storage)
+
+These need the same kind of **durable server-side storage** and are the natural
+next steps once a store is chosen:
 
 - **Verification data source.** `src/features/developer-api/verification-source.ts`
   is the single integration seam. It currently returns an empty history (so
   unknown addresses correctly read as `unverified`); wire a real event store
   there and every endpoint — API and badge — starts returning live data.
-- **User consent & revocation.** A key alone must not read a specific user's
-  data — the user must grant consent, and revoking it must cut access
-  immediately. Immediate revocation needs a durable revocation list.
+- **Durable `ConsentStore`** (Redis/Postgres/KV) replacing the in-memory default.
 - **Webhooks** for verification-status changes, with signed payloads and
   retry/backoff.
 - **Shared rate-limit store** so limits survive restarts and span instances.

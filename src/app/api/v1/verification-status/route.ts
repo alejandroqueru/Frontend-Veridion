@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { hasScope } from '@/features/developer-api/api-keys';
 import { authenticate } from '@/features/developer-api/auth';
+import { getConsentStore } from '@/features/developer-api/consent-store';
 import { checkApiRateLimit } from '@/features/developer-api/rate-limit';
 import { buildVerificationStatus } from '@/features/developer-api/status';
 import { getVerificationEvents } from '@/features/developer-api/verification-source';
@@ -42,6 +43,18 @@ export async function GET(req: NextRequest) {
   }
   if (address && !STELLAR_ADDRESS.test(address)) {
     return NextResponse.json({ error: 'Invalid Stellar address.' }, { status: 400 });
+  }
+
+  // Consent gate: a valid key is not enough — the subject must have explicitly
+  // authorized this app to read their data. Revoking that consent stops access
+  // immediately (see consent-store.ts).
+  const subject = (address ?? userToken) as string;
+  const consented = await getConsentStore().isGranted(auth.claims.appId, subject);
+  if (!consented) {
+    return NextResponse.json(
+      { error: 'User consent required. The subject has not authorized this application.' },
+      { status: 403 },
+    );
   }
 
   const events = await getVerificationEvents({
