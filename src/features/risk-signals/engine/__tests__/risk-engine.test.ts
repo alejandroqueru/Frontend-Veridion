@@ -42,12 +42,14 @@ describe('computeRiskAssessment', () => {
       correlation: maxed('device-correlation'),
       velocity: maxed('velocity'),
       disposablePhone: maxed('disposable-phone'),
+      networkCorrelation: maxed('network-correlation'),
+      geoMismatch: maxed('geo-mismatch'),
       now: NOW,
     });
     expect(assessment.score).toBe(100);
   });
 
-  it('omits the disposable-phone signal from the list when not provided', () => {
+  it('omits the optional signals from the list when not provided', () => {
     const assessment = computeRiskAssessment({
       subject: 's',
       correlation: zero('device-correlation'),
@@ -55,17 +57,56 @@ describe('computeRiskAssessment', () => {
       now: NOW,
     });
     expect(assessment.signals.some((s) => s.type === 'disposable-phone')).toBe(false);
+    expect(assessment.signals.some((s) => s.type === 'network-correlation')).toBe(false);
+    expect(assessment.signals.some((s) => s.type === 'geo-mismatch')).toBe(false);
     expect(assessment.signals).toHaveLength(2);
   });
 
-  it('includes the disposable-phone signal when provided, even at score 0', () => {
+  it('includes each optional signal when provided, even at score 0', () => {
     const assessment = computeRiskAssessment({
       subject: 's',
       correlation: zero('device-correlation'),
       velocity: zero('velocity'),
       disposablePhone: zero('disposable-phone'),
+      networkCorrelation: zero('network-correlation'),
+      geoMismatch: zero('geo-mismatch'),
       now: NOW,
     });
-    expect(assessment.signals).toHaveLength(3);
+    expect(assessment.signals).toHaveLength(5);
+  });
+
+  it('weights every signal so a single maxed signal alone never reaches 100', () => {
+    const types: RiskSignal['type'][] = [
+      'device-correlation',
+      'velocity',
+      'disposable-phone',
+      'network-correlation',
+      'geo-mismatch',
+    ];
+    for (const type of types) {
+      const base = {
+        subject: 's',
+        correlation: zero('device-correlation'),
+        velocity: zero('velocity'),
+        now: NOW,
+      };
+      const assessment = computeRiskAssessment({ ...base, [signalInputKeyFor(type)]: maxed(type) });
+      expect(assessment.score).toBeLessThan(100);
+    }
   });
 });
+
+function signalInputKeyFor(type: RiskSignal['type']): 'correlation' | 'velocity' | 'disposablePhone' | 'networkCorrelation' | 'geoMismatch' {
+  switch (type) {
+    case 'device-correlation':
+      return 'correlation';
+    case 'velocity':
+      return 'velocity';
+    case 'disposable-phone':
+      return 'disposablePhone';
+    case 'network-correlation':
+      return 'networkCorrelation';
+    case 'geo-mismatch':
+      return 'geoMismatch';
+  }
+}

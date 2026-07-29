@@ -5,7 +5,12 @@
 // `service.ts` for the write/read entrypoints and
 // `__tests__/service.test.ts` for the boundary test that enforces this.
 
-export type RiskSignalType = 'device-correlation' | 'velocity' | 'disposable-phone';
+export type RiskSignalType =
+  | 'device-correlation'
+  | 'network-correlation'
+  | 'velocity'
+  | 'disposable-phone'
+  | 'geo-mismatch';
 
 export interface RiskSignal {
   type: RiskSignalType;
