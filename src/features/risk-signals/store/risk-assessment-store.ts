@@ -10,20 +10,31 @@
 
 import type { RiskAssessment } from '../types';
 
+// Async for the same reason as RiskEventStore (see risk-event-store.ts):
+// a genuinely swappable-to-Redis store can't have a synchronous interface.
 export interface RiskAssessmentStore {
-  save(assessment: RiskAssessment): void;
-  getLatest(subject: string): RiskAssessment | null;
+  save(assessment: RiskAssessment): Promise<void>;
+  getLatest(subject: string): Promise<RiskAssessment | null>;
+  /** All stored assessments at or above `minScore`, most recent first. Powers the internal review endpoint (see api/internal/risk-review). */
+  listAbove(minScore: number, limit: number): Promise<RiskAssessment[]>;
 }
 
 export class InMemoryRiskAssessmentStore implements RiskAssessmentStore {
   private latest = new Map<string, RiskAssessment>();
 
-  save(assessment: RiskAssessment): void {
+  async save(assessment: RiskAssessment): Promise<void> {
     this.latest.set(assessment.subject, assessment);
   }
 
-  getLatest(subject: string): RiskAssessment | null {
+  async getLatest(subject: string): Promise<RiskAssessment | null> {
     return this.latest.get(subject) ?? null;
+  }
+
+  async listAbove(minScore: number, limit: number): Promise<RiskAssessment[]> {
+    return [...this.latest.values()]
+      .filter((a) => a.score >= minScore)
+      .sort((a, b) => b.computedAt - a.computedAt)
+      .slice(0, limit);
   }
 }
 
