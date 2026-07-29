@@ -4,7 +4,7 @@ import { useCallback } from 'react';
 
 import { useWalletStore } from '@/features/wallet/store/wallet-store';
 
-import { getDeviceFingerprint } from '../services/fingerprint';
+import { getDeviceFingerprint, getTimezoneOffsetMinutes } from '../services/fingerprint';
 
 /**
  * Fires a best-effort report to the internal risk-signal ingestion endpoint
@@ -31,7 +31,13 @@ export function useRiskSignalReporter() {
         await fetch('/api/internal/risk-signal', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ subject, fingerprint, providerId, phone: extra?.phone }),
+          body: JSON.stringify({
+            subject,
+            fingerprint,
+            providerId,
+            phone: extra?.phone,
+            timezoneOffsetMinutes: getTimezoneOffsetMinutes(),
+          }),
           keepalive: true,
         });
       } catch {
