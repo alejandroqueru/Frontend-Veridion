@@ -71,3 +71,18 @@ export async function getDeviceFingerprint(): Promise<string> {
 
   return fingerprint;
 }
+
+/**
+ * The browser's raw UTC-offset-in-minutes, sent in the clear (unlike the
+ * fingerprint hash above) — see `constants/calling-code-timezones.ts` for
+ * why this one field is exempt from hashing: `engine/geo-mismatch-engine.ts`
+ * needs to compare it against a phone number's calling code server-side,
+ * which an opaque hash can't support. A single coarse offset value (60
+ * possible values, ±14h in 15-30min steps) is low enough resolution on its
+ * own to identify anyone; it's the same order of granularity already
+ * exposed by every `Date` object a page can read.
+ */
+export function getTimezoneOffsetMinutes(): number | undefined {
+  if (typeof window === 'undefined') return undefined;
+  return new Date().getTimezoneOffset();
+}
