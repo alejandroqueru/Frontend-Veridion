@@ -6,6 +6,7 @@ import { generateNonce } from '../utils/nonce';
 import { getOAuthRedirectUri } from '../utils/oauth';
 import { isInFlight } from '../machine/verification-machine';
 import { useMachineState } from './use-machine-state';
+import { useAuditLogStore } from '@/features/data-privacy/audit-log-store';
 
 interface BuildAuthorizeUrlParams {
   clientId: string;
@@ -54,6 +55,7 @@ export function useOAuthProvider({
   const completeVerification = useVerificationStore((state) => state.completeVerification);
   const isVerificationCompleted = useVerificationStore((state) => state.isVerificationCompleted);
   const machine = useMachineState(providerId);
+  const appendAuditEntry = useAuditLogStore((state) => state.appendEntry);
   const handledCallbackRef = useRef(false);
 
   const exchange = useCallback(
@@ -73,6 +75,12 @@ export function useOAuthProvider({
         const data = await response.json();
         completeVerification(providerId, 'social', points);
         dispatchMachineEvent(providerId, { type: 'SUCCEED' });
+        // Record that this provider was granted access to the user's identity
+        appendAuditEntry('access', {
+          providerId,
+          source: 'oauth',
+          grantedAt: new Date().toISOString(),
+        });
         onSuccess?.(data.user);
         window.history.replaceState({}, document.title, window.location.pathname);
       } catch (error) {
