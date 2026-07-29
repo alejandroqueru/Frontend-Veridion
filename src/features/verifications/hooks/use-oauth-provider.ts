@@ -7,6 +7,7 @@ import { getOAuthRedirectUri } from '../utils/oauth';
 import { isInFlight } from '../machine/verification-machine';
 import { useMachineState } from './use-machine-state';
 import { useAuditLogStore } from '@/features/data-privacy/audit-log-store';
+import { useRiskSignalReporter } from '@/features/risk-signals/hooks/use-risk-signal-reporter';
 
 interface BuildAuthorizeUrlParams {
   clientId: string;
@@ -56,6 +57,7 @@ export function useOAuthProvider({
   const isVerificationCompleted = useVerificationStore((state) => state.isVerificationCompleted);
   const machine = useMachineState(providerId);
   const appendAuditEntry = useAuditLogStore((state) => state.appendEntry);
+  const reportRiskSignal = useRiskSignalReporter();
   const handledCallbackRef = useRef(false);
 
   const exchange = useCallback(
@@ -81,6 +83,7 @@ export function useOAuthProvider({
           source: 'oauth',
           grantedAt: new Date().toISOString(),
         });
+        void reportRiskSignal(providerId);
         onSuccess?.(data.user);
         window.history.replaceState({}, document.title, window.location.pathname);
       } catch (error) {
@@ -89,7 +92,7 @@ export function useOAuthProvider({
         onError?.(error);
       }
     },
-    [providerId, points, exchangeEndpoint, completeVerification, dispatchMachineEvent, onSuccess, onError],
+    [providerId, points, exchangeEndpoint, completeVerification, dispatchMachineEvent, onSuccess, onError, appendAuditEntry, reportRiskSignal],
   );
 
   useEffect(() => {

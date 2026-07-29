@@ -5,6 +5,7 @@ import type { OtpStep, ContactChannel } from '../types/otp.types';
 import { OTP_CONFIG } from '../constants/contact-verifications';
 import { useVerificationStore, type VerificationType } from '../store/verification-store';
 import { generateNonce } from '../utils/nonce';
+import { useRiskSignalReporter } from '@/features/risk-signals/hooks/use-risk-signal-reporter';
 
 interface UseOtpFlowOptions {
   /** Identifies this flow's slot in the shared verification machine — 'phone-verification' | 'email-verification'. */
@@ -19,6 +20,7 @@ interface UseOtpFlowOptions {
 export function useOtpFlow({ providerId, channel, identifier, wallet, onSuccess, onError }: UseOtpFlowOptions) {
   const dispatchMachineEvent = useVerificationStore((state) => state.dispatchMachineEvent);
   const getMachineState = useVerificationStore((state) => state.getMachineState);
+  const reportRiskSignal = useRiskSignalReporter();
 
   // Resumability: if a code was already sent (machine still pending_external
   // from a previous mount — e.g. the user closed the modal or the tab after
@@ -127,6 +129,7 @@ export function useOtpFlow({ providerId, channel, identifier, wallet, onSuccess,
         return;
       }
       setStep('done');
+      void reportRiskSignal(providerId, channel === 'phone' ? { phone: identifier } : undefined);
       onSuccess?.();
     } catch {
       const message = 'Network error. Please try again.';
@@ -135,7 +138,7 @@ export function useOtpFlow({ providerId, channel, identifier, wallet, onSuccess,
     } finally {
       setLoading(false);
     }
-  }, [providerId, channel, code, identifier, wallet, onSuccess, onError, dispatchMachineEvent, beginAttempt]);
+  }, [providerId, channel, code, identifier, wallet, onSuccess, onError, dispatchMachineEvent, beginAttempt, reportRiskSignal]);
 
   const reset = useCallback(() => {
     setStep('input');
