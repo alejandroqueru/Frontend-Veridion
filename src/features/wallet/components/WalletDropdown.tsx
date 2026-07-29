@@ -15,6 +15,23 @@ export function WalletDropdown({ className = '' }: WalletDropdownProps) {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   
+  const [isWalletKitReady, setIsWalletKitReady] = useState(false);
+  const [kit, setKit] = useState<any>(null);
+
+  useEffect(() => {
+    import('../services/walletConfig').then(({ initializeWalletKit }) => {
+      initializeWalletKit()
+        .then((walletKit) => {
+          setKit(walletKit);
+          setIsWalletKitReady(true);
+        })
+        .catch((error) => {
+          console.error('Failed to initialize wallet kit:', error);
+          setIsWalletKitReady(true);
+        });
+    });
+  }, []);
+
   const {
     isConnected,
     publicKey,
@@ -22,6 +39,8 @@ export function WalletDropdown({ className = '' }: WalletDropdownProps) {
     shortAddress,
     isTestnet,
     handleDisconnect,
+    connectWallet,
+    handleConnectionError,
   } = useWallet();
 
   // Close dropdown when clicking outside
@@ -36,9 +55,34 @@ export function WalletDropdown({ className = '' }: WalletDropdownProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Don't render if not connected
+  const handleConnectClick = async () => {
+    if (!kit) return;
+    try {
+      const { connectWallet: connectWalletService } = await import('../services/walletConfig');
+      await connectWalletService(kit, connectWallet);
+    } catch (error) {
+      handleConnectionError({
+        code: 'CONNECTION_ERROR',
+        message: error instanceof Error ? error.message : 'Failed to connect wallet',
+        details: error,
+      });
+    }
+  };
+
+  // If not connected, show the connect button
   if (!isConnected || !publicKey) {
-    return null;
+    return (
+      <div className={className}>
+        <Button
+          onClick={handleConnectClick}
+          disabled={!isWalletKitReady || !kit}
+          className="bg-transparent border border-white/20 hover:bg-white/10 px-6 py-3 text-sm text-white rounded-lg transition-colors"
+        >
+          <Wallet size={16} className="mr-2" />
+          {!isWalletKitReady ? 'Loading...' : 'Connect Wallet'}
+        </Button>
+      </div>
+    );
   }
 
   const handleDisconnectClick = () => {
