@@ -28,4 +28,17 @@ describe('computeCorrelationSignal', () => {
     const signal = computeCorrelationSignal(['a', 'b', 'c'], { windowMs: 1000, maxDistinctSubjects: 1 });
     expect(signal.score).toBeGreaterThan(0);
   });
+
+  it('scores exactly 0 right at the threshold (boundary is inclusive of normal usage)', () => {
+    const atThreshold = Array.from({ length: DEFAULT_CORRELATION_CONFIG.maxDistinctSubjects }, (_, i) => `wallet-${i}`);
+    expect(computeCorrelationSignal(atThreshold).score).toBe(0);
+  });
+
+  it('scores above 0 for exactly one account over the threshold', () => {
+    const overByOne = Array.from(
+      { length: DEFAULT_CORRELATION_CONFIG.maxDistinctSubjects + 1 },
+      (_, i) => `wallet-${i}`,
+    );
+    expect(computeCorrelationSignal(overByOne).score).toBeGreaterThan(0);
+  });
 });

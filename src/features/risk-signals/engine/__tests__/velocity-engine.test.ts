@@ -35,4 +35,17 @@ describe('computeVelocitySignal', () => {
     const signal = computeVelocitySignal([NOW + 60_000], NOW);
     expect(signal.score).toBe(0);
   });
+
+  it('scores exactly 0 with exactly the max plausible completions and a plausible gap', () => {
+    const timestamps = Array.from(
+      { length: DEFAULT_VELOCITY_CONFIG.maxCompletionsInWindow },
+      (_, i) => NOW - i * (DEFAULT_VELOCITY_CONFIG.minPlausibleGapMs + 1),
+    );
+    expect(computeVelocitySignal(timestamps, NOW).score).toBe(0);
+  });
+
+  it('scores exactly 0 with a gap exactly at the plausibility floor', () => {
+    const signal = computeVelocitySignal([NOW - DEFAULT_VELOCITY_CONFIG.minPlausibleGapMs, NOW], NOW);
+    expect(signal.score).toBe(0);
+  });
 });
