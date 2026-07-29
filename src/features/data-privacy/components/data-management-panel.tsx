@@ -41,11 +41,10 @@ function ExportCard() {
 
   const events = useVerificationStore((s) => s.events);
   const completedVerifications = useVerificationStore((s) => s.completedVerifications);
-  const walletState = useWalletStore((s) => ({
-    publicKey: s.publicKey,
-    walletName: s.walletName,
-    network: s.network,
-  }));
+  const publicKey = useWalletStore((s) => s.publicKey);
+  const walletName = useWalletStore((s) => s.walletName);
+  const network = useWalletStore((s) => s.network);
+  const walletState = { publicKey, walletName, network };
   const auditEntries = useAuditLogStore((s) => s.entries);
   const appendEntry = useAuditLogStore((s) => s.appendEntry);
 
