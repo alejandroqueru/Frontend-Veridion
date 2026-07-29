@@ -16,14 +16,26 @@ export interface RiskEventRecord {
   subject: string;
   providerId: string;
   timestamp: number;
+  /** Client IP as seen by the ingestion route, when available. A separate, weaker correlation axis from `fingerprint` — see `engine/network-correlation-engine.ts`. */
+  ip?: string;
 }
 
+/**
+ * Async from the start, even though the in-memory default below resolves
+ * synchronously under the hood: a store that's genuinely swappable for
+ * Redis (see `redis-risk-event-store.ts`) can't be sync, since real network
+ * I/O can't be forced into a synchronous return. Designing the interface
+ * async now means the swap is a one-line `setRiskEventStore` call later,
+ * not a breaking interface change across every caller.
+ */
 export interface RiskEventStore {
-  record(event: RiskEventRecord): void;
+  record(event: RiskEventRecord): Promise<void>;
   /** Distinct subjects seen under this device/network signal within the trailing window ending at `now`. */
-  distinctSubjectsForFingerprint(fingerprint: string, windowMs: number, now: number): string[];
+  distinctSubjectsForFingerprint(fingerprint: string, windowMs: number, now: number): Promise<string[]>;
+  /** Distinct subjects seen from this client IP within the trailing window ending at `now`. */
+  distinctSubjectsForIp(ip: string, windowMs: number, now: number): Promise<string[]>;
   /** Completion timestamps recorded for this subject within the trailing window ending at `now`. */
-  timestampsForSubject(subject: string, windowMs: number, now: number): number[];
+  timestampsForSubject(subject: string, windowMs: number, now: number): Promise<number[]>;
 }
 
 /**
@@ -34,22 +46,40 @@ export interface RiskEventStore {
  */
 const MAX_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
+/**
+ * Time-based pruning alone doesn't bound memory within the retention
+ * window: the ingestion route's rate limiting (see `api/internal/risk-signal
+ * /route.ts`) makes flooding one key expensive, but isn't a hard guarantee.
+ * This caps each key at the N most recent events regardless of age, so a
+ * single fingerprint/subject can never grow the store unboundedly even if
+ * the rate limit is bypassed or misconfigured.
+ */
+const MAX_ENTRIES_PER_KEY = 500;
+
 export class InMemoryRiskEventStore implements RiskEventStore {
   private byFingerprint = new Map<string, RiskEventRecord[]>();
   private bySubject = new Map<string, RiskEventRecord[]>();
+  private byIp = new Map<string, RiskEventRecord[]>();
 
-  record(event: RiskEventRecord): void {
+  async record(event: RiskEventRecord): Promise<void> {
     this.pushPruned(this.byFingerprint, event.fingerprint, event);
     this.pushPruned(this.bySubject, event.subject, event);
+    if (event.ip) this.pushPruned(this.byIp, event.ip, event);
   }
 
-  distinctSubjectsForFingerprint(fingerprint: string, windowMs: number, now: number): string[] {
+  async distinctSubjectsForFingerprint(fingerprint: string, windowMs: number, now: number): Promise<string[]> {
     const cutoff = now - windowMs;
     const events = this.byFingerprint.get(fingerprint) ?? [];
     return [...new Set(events.filter((e) => e.timestamp >= cutoff).map((e) => e.subject))];
   }
 
-  timestampsForSubject(subject: string, windowMs: number, now: number): number[] {
+  async distinctSubjectsForIp(ip: string, windowMs: number, now: number): Promise<string[]> {
+    const cutoff = now - windowMs;
+    const events = this.byIp.get(ip) ?? [];
+    return [...new Set(events.filter((e) => e.timestamp >= cutoff).map((e) => e.subject))];
+  }
+
+  async timestampsForSubject(subject: string, windowMs: number, now: number): Promise<number[]> {
     const cutoff = now - windowMs;
     const events = this.bySubject.get(subject) ?? [];
     return events.filter((e) => e.timestamp >= cutoff).map((e) => e.timestamp);
@@ -59,6 +89,11 @@ export class InMemoryRiskEventStore implements RiskEventStore {
     const cutoff = event.timestamp - MAX_RETENTION_MS;
     const existing = (map.get(key) ?? []).filter((e) => e.timestamp >= cutoff);
     existing.push(event);
+    // Trim oldest-first so the cap always keeps the most recent activity —
+    // the events any window query actually cares about.
+    if (existing.length > MAX_ENTRIES_PER_KEY) {
+      existing.splice(0, existing.length - MAX_ENTRIES_PER_KEY);
+    }
     map.set(key, existing);
   }
 }
