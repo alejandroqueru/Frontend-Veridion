@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/features/dashboard/layout/dashboard-layout";
 import { DashboardOverview } from "@/features/dashboard/components/dashboard-overview";
 import { HumanityScoreSection } from "@/features/dashboard/components/humanity-secore-section";
@@ -10,6 +10,8 @@ import { BlockchainSection } from "@/features/dashboard/components/blockchain-ve
 import { DataManagementPanel } from "@/features/data-privacy/components/data-management-panel";
 import { PostDeletionState } from "@/features/data-privacy/components/post-deletion-state";
 import { useDataSubjectStatus } from "@/features/data-privacy/use-data-subject-status";
+import { useWalletStore } from "@/features/wallet/store/wallet-store";
+import { useAuditLogStore } from "@/features/data-privacy/audit-log-store";
 
 export default function Dashboard() {
   const dataSubjectStatus = useDataSubjectStatus();
@@ -18,6 +20,18 @@ export default function Dashboard() {
   const [justDeleted, setJustDeleted] = useState(false);
 
   const isDeleted = dataSubjectStatus === "deleted" || justDeleted;
+
+  const isConnected = useWalletStore((s) => s.isConnected);
+  const markActive = useAuditLogStore((s) => s.markActive);
+
+  // If the user connects a wallet while in a deleted state, reset them to active
+  // so they can build a fresh profile as promised by the post-deletion banner.
+  useEffect(() => {
+    if (isConnected && (dataSubjectStatus === "deleted" || justDeleted)) {
+      markActive();
+      setJustDeleted(false);
+    }
+  }, [isConnected, dataSubjectStatus, justDeleted, markActive]);
 
   return (
     <>

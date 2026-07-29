@@ -39,6 +39,12 @@ interface AuditLogState {
    */
   markDeleted: () => void;
 
+  /**
+   * Mark the subject as active again. Called when a user reconnects their wallet
+   * after previously deleting their data.
+   */
+  markActive: () => void;
+
   /** Expose all entries (frozen, in append order). */
   getEntries: () => readonly AuditLogEntry[];
 }
@@ -83,6 +89,10 @@ export const useAuditLogStore = create<AuditLogState>()(
           dataSubjectStatus: 'deleted',
         }));
         return entry;
+      },
+
+      markActive: () => {
+        set({ dataSubjectStatus: 'active' });
       },
 
       getEntries: () => get().entries,
