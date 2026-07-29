@@ -21,8 +21,8 @@ describe('risk-signals service — synthetic signal combinations', () => {
     resetRiskAssessmentStore();
   });
 
-  it('scores a normal user (one provider, no reuse, no disposable phone) at 0', () => {
-    const assessment = recordVerificationSignal({
+  it('scores a normal user (one provider, no reuse, no disposable phone) at 0', async () => {
+    const assessment = await recordVerificationSignal({
       subject: 'wallet-normal',
       fingerprint: 'fp-normal',
       providerId: 'github',
@@ -33,13 +33,13 @@ describe('risk-signals service — synthetic signal combinations', () => {
     expect(assessment.signals.every((s) => s.score === 0)).toBe(true);
   });
 
-  it('raises the score for implausibly fast multi-provider completion (velocity abuse)', () => {
+  it('raises the score for implausibly fast multi-provider completion (velocity abuse)', async () => {
     const subject = 'wallet-velocity';
     const providers = ['github', 'discord', 'linkedin', 'email-verification'];
 
     let last;
     for (const [i, providerId] of providers.entries()) {
-      last = recordVerificationSignal({
+      last = await recordVerificationSignal({
         subject,
         fingerprint: `fp-velocity-${i}`, // distinct devices, so no correlation signal should fire
         providerId,
@@ -52,12 +52,12 @@ describe('risk-signals service — synthetic signal combinations', () => {
     expect(last!.signals.find((s) => s.type === 'device-correlation')?.score).toBe(0);
   });
 
-  it('raises the score when one device signal fans out across many distinct accounts (device reuse / bot farm)', () => {
+  it('raises the score when one device signal fans out across many distinct accounts (device reuse / bot farm)', async () => {
     const fingerprint = 'fp-shared-device';
 
     let last;
     for (let i = 0; i < 8; i++) {
-      last = recordVerificationSignal({
+      last = await recordVerificationSignal({
         subject: `wallet-farm-${i}`,
         fingerprint,
         providerId: 'github',
@@ -70,8 +70,8 @@ describe('risk-signals service — synthetic signal combinations', () => {
     expect(last!.signals.find((s) => s.type === 'velocity')?.score).toBe(0);
   });
 
-  it('raises the score for a disposable/VOIP phone pattern', () => {
-    const assessment = recordVerificationSignal({
+  it('raises the score for a disposable/VOIP phone pattern', async () => {
+    const assessment = await recordVerificationSignal({
       subject: 'wallet-phone',
       fingerprint: 'fp-phone',
       providerId: 'phone-verification',
@@ -83,8 +83,8 @@ describe('risk-signals service — synthetic signal combinations', () => {
     expect(assessment.score).toBeGreaterThan(0);
   });
 
-  it('does not flag a normal phone number as disposable', () => {
-    const assessment = recordVerificationSignal({
+  it('does not flag a normal phone number as disposable', async () => {
+    const assessment = await recordVerificationSignal({
       subject: 'wallet-real-phone',
       fingerprint: 'fp-real-phone',
       providerId: 'phone-verification',
@@ -95,20 +95,72 @@ describe('risk-signals service — synthetic signal combinations', () => {
     expect(assessment.signals.find((s) => s.type === 'disposable-phone')?.score).toBe(0);
   });
 
-  it('getRiskAssessment returns the most recently computed assessment for a subject', () => {
-    recordVerificationSignal({ subject: 'wallet-latest', fingerprint: 'fp-1', providerId: 'github', now: NOW });
-    const second = recordVerificationSignal({
+  it('getRiskAssessment returns the most recently computed assessment for a subject', async () => {
+    await recordVerificationSignal({ subject: 'wallet-latest', fingerprint: 'fp-1', providerId: 'github', now: NOW });
+    const second = await recordVerificationSignal({
       subject: 'wallet-latest',
       fingerprint: 'fp-1',
       providerId: 'discord',
       now: NOW + 1,
     });
 
-    expect(getRiskAssessment('wallet-latest')).toEqual(second);
+    expect(await getRiskAssessment('wallet-latest')).toEqual(second);
   });
 
-  it('returns null for a subject with no recorded signals', () => {
-    expect(getRiskAssessment('never-seen-subject')).toBeNull();
+  it('returns null for a subject with no recorded signals', async () => {
+    expect(await getRiskAssessment('never-seen-subject')).toBeNull();
+  });
+
+  it('raises the score when many accounts verify from the same IP (network correlation)', async () => {
+    const ip = '203.0.113.9';
+
+    let last;
+    for (let i = 0; i < 10; i++) {
+      last = await recordVerificationSignal({
+        subject: `wallet-net-${i}`,
+        fingerprint: `fp-net-${i}`, // distinct devices — isolates this from device correlation
+        providerId: 'github',
+        ip,
+        now: NOW + i * 60 * 60 * 1000,
+      });
+    }
+
+    expect(last!.signals.find((s) => s.type === 'network-correlation')?.score).toBeGreaterThan(0);
+    expect(last!.signals.find((s) => s.type === 'device-correlation')?.score).toBe(0);
+  });
+
+  it('does not compute a network-correlation signal when no IP is provided', async () => {
+    const assessment = await recordVerificationSignal({
+      subject: 'wallet-no-ip',
+      fingerprint: 'fp-no-ip',
+      providerId: 'github',
+      now: NOW,
+    });
+    expect(assessment.signals.some((s) => s.type === 'network-correlation')).toBe(false);
+  });
+
+  it('raises the score when the phone calling code is implausible for the browser timezone (geo-mismatch)', async () => {
+    const assessment = await recordVerificationSignal({
+      subject: 'wallet-geo',
+      fingerprint: 'fp-geo',
+      providerId: 'phone-verification',
+      phone: '+51987654321', // Peru
+      timezoneOffsetMinutes: -540, // Japan's offset — nowhere near Peru's
+      now: NOW,
+    });
+    expect(assessment.signals.find((s) => s.type === 'geo-mismatch')?.score).toBe(1);
+  });
+
+  it('does not flag geo-mismatch when the phone and timezone are consistent', async () => {
+    const assessment = await recordVerificationSignal({
+      subject: 'wallet-geo-ok',
+      fingerprint: 'fp-geo-ok',
+      providerId: 'phone-verification',
+      phone: '+51987654321',
+      timezoneOffsetMinutes: 300,
+      now: NOW,
+    });
+    expect(assessment.signals.find((s) => s.type === 'geo-mismatch')?.score).toBe(0);
   });
 });
 
@@ -118,18 +170,23 @@ describe('risk-signals isolation from Human Score', () => {
     resetRiskAssessmentStore();
   });
 
-  it('never mutates verification-store state (the Human Score source of truth)', () => {
+  it('never mutates verification-store state (the Human Score source of truth)', async () => {
     const before = useVerificationStore.getState().events;
 
-    recordVerificationSignal({ subject: 'wallet-isolation', fingerprint: 'fp-isolation', providerId: 'github', now: NOW });
-    getRiskAssessment('wallet-isolation');
+    await recordVerificationSignal({
+      subject: 'wallet-isolation',
+      fingerprint: 'fp-isolation',
+      providerId: 'github',
+      now: NOW,
+    });
+    await getRiskAssessment('wallet-isolation');
 
     // Same array reference: nothing in the risk-signals write/read path
     // touched the verification store, even indirectly.
     expect(useVerificationStore.getState().events).toBe(before);
   });
 
-  it('flags a fully "verified" account as risky without changing its Human Score inputs', () => {
+  it('flags a fully "verified" account as risky without changing its Human Score inputs', async () => {
     // Simulate an account that has completed every provider (would score a
     // full Human Score) but is clearly a bot-farm identity: reused device,
     // implausible velocity, disposable phone.
@@ -138,14 +195,19 @@ describe('risk-signals isolation from Human Score', () => {
 
     // Prime the fingerprint with other farmed accounts first.
     for (let i = 0; i < 6; i++) {
-      recordVerificationSignal({ subject: `wallet-farm-${i}`, fingerprint, providerId: 'github', now: NOW + i * 1000 });
+      await recordVerificationSignal({
+        subject: `wallet-farm-${i}`,
+        fingerprint,
+        providerId: 'github',
+        now: NOW + i * 1000,
+      });
     }
 
     useVerificationStore.getState().completeVerification('github', 'social', 6);
     useVerificationStore.getState().completeVerification('discord', 'social', 5);
     const eventsBeforeRisk = useVerificationStore.getState().events;
 
-    const assessment = recordVerificationSignal({
+    const assessment = await recordVerificationSignal({
       subject,
       fingerprint,
       providerId: 'phone-verification',
