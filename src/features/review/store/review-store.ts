@@ -52,20 +52,22 @@ export const useReviewStore = create<ReviewState>()(
         const { riskThreshold, flags } = get();
         
         if (score >= riskThreshold) {
-          // Check if there is an active flag
-          const activeFlag = flags.find(f => f.accountId === accountId && f.status === 'flagged');
-          if (activeFlag) {
-            // Update the flag with the higher score if the risk keeps increasing
-            if (score > activeFlag.riskScore) {
+          const accountFlags = flags.filter(f => f.accountId === accountId);
+          const latestFlag = accountFlags.length > 0 ? accountFlags[accountFlags.length - 1] : null;
+
+          // If the account is currently flagged or already confirmed fraudulent, don't create a new flag.
+          // Just update the risk score if it has increased.
+          if (latestFlag && (latestFlag.status === 'flagged' || latestFlag.status === 'confirmed-fraudulent')) {
+            if (score > latestFlag.riskScore) {
               set({
                 flags: flags.map(f => 
-                  f.id === activeFlag.id 
+                  f.id === latestFlag.id 
                     ? { ...f, riskScore: score, signals }
                     : f
                 )
               });
             }
-            return; // Already flagged, updated if necessary
+            return;
           }
           
           const dismissedFlags = flags.filter(f => f.accountId === accountId && f.status === 'dismissed');
@@ -100,7 +102,13 @@ export const useReviewStore = create<ReviewState>()(
       },
       
       getFlagStatusForAccount: (accountId) => {
-        const { flags } = get();
+        const { flags, riskScore, riskThreshold } = get();
+        
+        // As requested: automatically unblock/remove flag if the risk score drops below the threshold
+        if (riskScore < riskThreshold) {
+          return null;
+        }
+
         // Since flags are appended, the last one is the most recent
         const accountFlags = flags.filter(f => f.accountId === accountId);
         if (accountFlags.length > 0) {
