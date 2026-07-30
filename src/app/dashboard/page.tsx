@@ -12,6 +12,8 @@ import { PostDeletionState } from "@/features/data-privacy/components/post-delet
 import { useDataSubjectStatus } from "@/features/data-privacy/use-data-subject-status";
 import { useWalletStore } from "@/features/wallet/store/wallet-store";
 import { useAuditLogStore } from "@/features/data-privacy/audit-log-store";
+import { useReviewStore } from "@/features/review/store/review-store";
+import { ShieldAlert } from "lucide-react";
 
 export default function Dashboard() {
   const dataSubjectStatus = useDataSubjectStatus();
@@ -23,6 +25,9 @@ export default function Dashboard() {
 
   const isConnected = useWalletStore((s) => s.isConnected);
   const markActive = useAuditLogStore((s) => s.markActive);
+  
+  const flagStatus = useReviewStore((s) => s.getFlagStatusForAccount("current-user"));
+  const isSuspended = flagStatus === "confirmed-fraudulent";
 
   // If the user connects a wallet while in a deleted state, reset them to active
   // so they can build a fresh profile as promised by the post-deletion banner.
@@ -37,7 +42,19 @@ export default function Dashboard() {
     <>
       <DashboardLayout>
         <div className="py-6 px-4 sm:py-8 sm:px-6 lg:py-12 lg:px-16 xl:px-24">
-          {isDeleted ? (
+          {isSuspended ? (
+            /* ── Suspended view ── */
+            <div className="flex flex-col items-center justify-center min-h-[50vh] text-center bg-[#111111] border border-red-500/20 rounded-xl p-8">
+              <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mb-6">
+                <ShieldAlert className="w-8 h-8 text-red-500" />
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-3">Account Suspended</h2>
+              <p className="text-gray-400 max-w-md">
+                Your account has been suspended due to a violation of our terms of service or detected fraudulent activity.
+                If you believe this is a mistake, please contact support.
+              </p>
+            </div>
+          ) : isDeleted ? (
             /* ── Post-deletion view ── */
             <div className="space-y-8">
               <PostDeletionState />
@@ -57,8 +74,8 @@ export default function Dashboard() {
             </>
           )}
 
-          {/* Data management panel is always visible (below verifications when active) */}
-          {!isDeleted && (
+          {/* Data management panel is always visible (below verifications when active, unless suspended) */}
+          {!isDeleted && !isSuspended && (
             <div className="mt-8">
               <DataManagementPanel onDeleted={() => setJustDeleted(true)} />
             </div>

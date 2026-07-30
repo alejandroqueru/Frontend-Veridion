@@ -52,9 +52,21 @@ export const useReviewStore = create<ReviewState>()(
         const { riskThreshold, flags } = get();
         
         if (score >= riskThreshold) {
-          // Check if there is an active flag or a dismissed flag with exactly the same score/reasons
+          // Check if there is an active flag
           const activeFlag = flags.find(f => f.accountId === accountId && f.status === 'flagged');
-          if (activeFlag) return; // Already flagged
+          if (activeFlag) {
+            // Update the flag with the higher score if the risk keeps increasing
+            if (score > activeFlag.riskScore) {
+              set({
+                flags: flags.map(f => 
+                  f.id === activeFlag.id 
+                    ? { ...f, riskScore: score, signals }
+                    : f
+                )
+              });
+            }
+            return; // Already flagged, updated if necessary
+          }
           
           const dismissedFlags = flags.filter(f => f.accountId === accountId && f.status === 'dismissed');
           const isSameSignal = dismissedFlags.some(f => {
