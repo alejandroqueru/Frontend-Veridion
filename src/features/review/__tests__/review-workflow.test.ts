@@ -13,7 +13,7 @@ describe('Flagged Account Review Workflow', () => {
   });
 
   it('marks an account as "flagged for review" when crossing the threshold', () => {
-    const { setRiskScore, getFlagStatusForAccount } = useReviewStore.getState();
+    const { setRiskScore } = useReviewStore.getState();
     
     // Below threshold
     setRiskScore('user-1', 79, [{ source: 'test', score: 79, reason: 'test' }]);

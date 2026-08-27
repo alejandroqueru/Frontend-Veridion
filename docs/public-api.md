@@ -146,6 +146,14 @@ must have explicitly authorized the app, and can revoke that at any time.
   GET    /api/v1/consent?subject=                                           list a subject's grants
   ```
 
+These three endpoints are **not** API-key endpoints — they are actions by the
+data owner, and they require a **user session** whose verified address equals
+`subject`. Send it as `Authorization: Bearer vsa_...`; see
+[`authentication.md`](./authentication.md). A session for a different address is
+rejected with `403`, and holding a staff role does not help: consent is the
+subject's own data. Note that `subject` must therefore be a Stellar address —
+the `tok_...` form is not something a wallet can prove ownership of.
+
 Consent is the one part of the API that **cannot be stateless** — immediate
 revocation requires durable, mutable state. It lives behind the
 `ConsentStore` interface (`src/features/developer-api/consent-store.ts`). The
@@ -153,10 +161,9 @@ default implementation is **in-memory** (fine for a demo / single instance, but
 it does not survive restarts or span instances); swap in a durable
 implementation via `setConsentStore` for production — no other code changes.
 
-> DEMO NOTE: the consent API is not yet gated by user authentication. In
-> production these endpoints must verify the caller owns `subject` (e.g. a
-> Stellar wallet signature); otherwise anyone could grant/revoke on another
-> user's behalf.
+> The consent API is now gated by user authentication: the caller must hold a
+> session proving control of `subject`, established by a Stellar wallet
+> signature. See [`authentication.md`](./authentication.md).
 
 ## Webhooks
 

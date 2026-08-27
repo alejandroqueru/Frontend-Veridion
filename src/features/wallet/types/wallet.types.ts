@@ -38,14 +38,15 @@ export interface WalletState {
   // Wallet info
   publicKey: string | null;
   walletName: string | null;
-  
+  walletId: string | null;
+
   // Network
   network: NetworkType;
-  
+
   // Actions
   setConnecting: (connecting: boolean) => void;
   setConnected: (connected: boolean) => void;
-  setWalletInfo: (publicKey: string, walletName: string) => void;
+  setWalletInfo: (publicKey: string, walletName: string, walletId: string) => void;
   disconnect: () => void;
   setNetwork: (network: NetworkType) => void;
 }

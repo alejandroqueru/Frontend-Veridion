@@ -172,7 +172,7 @@ function ErasureCard({ onDeleted }: { onDeleted: () => void }) {
           <div>
             <h4 className="text-sm font-semibold text-white">Request data deletion</h4>
             <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">
-              Permanently erase all verification records and identity data from Veridion's
+              Permanently erase all verification records and identity data from Veridion&apos;s
               first-party stores. This action cannot be undone.
             </p>
           </div>

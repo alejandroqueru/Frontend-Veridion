@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import { requireSession } from '@/features/auth/guard';
 import { listFlaggedAssessments } from '@/features/risk-signals/service';
 
 // Minimal internal review-workflow endpoint: lists accounts whose risk
@@ -11,37 +12,22 @@ import { listFlaggedAssessments } from '@/features/risk-signals/service';
 // all, not a polished admin panel. It never touches the Human Score or
 // verification-store — see `features/risk-signals/service.ts`.
 //
-// DEMO NOTE, same caveat as api/v1/consent: gated by a single shared secret
-// (`RISK_REVIEW_TOKEN`) rather than a real admin auth/session system — this
-// repo has none. Production should replace this with whatever internal-
-// staff auth the rest of the app ends up using.
+// Access requires a session carrying the `reviewer` role. This replaces the
+// former `RISK_REVIEW_TOKEN` shared secret, which gave every reviewer the same
+// credential and so recorded no per-person identity: an audit entry could say
+// "someone with the token looked at flagged accounts" and nothing more. A
+// session names the individual reviewer, can be revoked for one person without
+// re-keying everyone, and is checked by the same `requireSession` every other
+// protected route uses.
 
 const DEFAULT_MIN_SCORE = 50;
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 
-// Avoids leaking the configured token's value through response-time
-// differences on a char-by-char short-circuit compare. Not worth reaching
-// for node:crypto's timingSafeEqual (which requires equal-length Buffers
-// anyway) for a string this short.
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
-
-function isAuthorized(req: NextRequest): boolean {
-  const expected = process.env.RISK_REVIEW_TOKEN;
-  // Fail closed: no token configured means no access, never open access.
-  if (!expected) return false;
-  const provided = req.headers.get('x-internal-token');
-  return provided !== null && timingSafeEqual(provided, expected);
-}
-
 export async function GET(req: NextRequest) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
+  const auth = await requireSession(req.headers, { role: 'reviewer' });
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
   const { searchParams } = new URL(req.url);

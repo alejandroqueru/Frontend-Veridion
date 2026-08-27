@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/shared/ui/button';
 import { useWallet } from '../hooks/useWallet';
 import { ChevronDown, Wallet, LogOut } from 'lucide-react';
+import type { WalletConnectionKit } from '../services/walletConfig';
 
 interface WalletDropdownProps {
   className?: string;
@@ -16,7 +17,7 @@ export function WalletDropdown({ className = '' }: WalletDropdownProps) {
   const router = useRouter();
   
   const [isWalletKitReady, setIsWalletKitReady] = useState(false);
-  const [kit, setKit] = useState<any>(null);
+  const [kit, setKit] = useState<WalletConnectionKit | null>(null);
 
   useEffect(() => {
     import('../services/walletConfig').then(({ initializeWalletKit }) => {
