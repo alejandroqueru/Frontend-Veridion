@@ -2,11 +2,19 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
+import { useAuthSession } from '@/features/auth/use-auth-session';
+
 import type { ConsentRecord } from '../consent-store';
 
 // User-facing consent screen: shows what an app is requesting and lets the user
 // Allow / Deny, plus a list of existing grants they can revoke at any time.
 // Talks to /api/v1/consent. Styling is intentionally minimal and inline.
+//
+// Granting is gated on a wallet signature. `/api/v1/consent` now requires a
+// session whose address matches `subject`, so the screen proves ownership
+// first — otherwise the Allow button would just produce a 401. The signature
+// prompt is also the honest UX: the user is authorizing access to their data,
+// and they approve it with the key that owns it.
 
 interface ConsentScreenProps {
   appId: string;
@@ -40,18 +48,28 @@ const button = (variant: 'primary' | 'ghost'): React.CSSProperties => ({
   color: variant === 'primary' ? '#ffffff' : '#3a4250',
 });
 
+const errorText: React.CSSProperties = { color: '#8a2b2b', fontSize: 13, margin: '12px 0 0' };
+
 export function ConsentScreen({ appId, appName, subject }: ConsentScreenProps) {
+  const { status, address, isAuthenticated, error, signIn, authorizedFetch } = useAuthSession();
+
   const [decision, setDecision] = useState<Decision>('pending');
   const [grants, setGrants] = useState<ConsentRecord[]>([]);
   const [busy, setBusy] = useState(false);
 
+  // A session for a *different* address cannot act here, and silently showing
+  // an empty grant list would be misleading about why.
+  const wrongAddress = isAuthenticated && address !== subject;
+  const canAct = isAuthenticated && !wrongAddress;
+
   const refreshGrants = useCallback(async () => {
-    const res = await fetch(`/api/v1/consent?subject=${encodeURIComponent(subject)}`);
+    if (!canAct) return;
+    const res = await authorizedFetch(`/api/v1/consent?subject=${encodeURIComponent(subject)}`);
     if (res.ok) {
       const body = (await res.json()) as { grants: ConsentRecord[] };
       setGrants(body.grants);
     }
-  }, [subject]);
+  }, [subject, canAct, authorizedFetch]);
 
   useEffect(() => {
     void refreshGrants();
@@ -60,11 +78,17 @@ export function ConsentScreen({ appId, appName, subject }: ConsentScreenProps) {
   const allow = async () => {
     setBusy(true);
     try {
-      await fetch('/api/v1/consent', {
+      // Prove ownership first if the user has not signed yet; a declined or
+      // failed signature leaves `error` set and never reaches the grant.
+      if (!isAuthenticated && !(await signIn())) return;
+
+      const res = await authorizedFetch('/api/v1/consent', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ appId, subject }),
       });
+      if (!res.ok) return;
+
       setDecision('granted');
       await refreshGrants();
     } finally {
@@ -75,7 +99,7 @@ export function ConsentScreen({ appId, appName, subject }: ConsentScreenProps) {
   const revoke = async (grant: ConsentRecord) => {
     setBusy(true);
     try {
-      await fetch(
+      await authorizedFetch(
         `/api/v1/consent?appId=${encodeURIComponent(grant.appId)}&subject=${encodeURIComponent(grant.subject)}`,
         { method: 'DELETE' },
       );
@@ -85,6 +109,8 @@ export function ConsentScreen({ appId, appName, subject }: ConsentScreenProps) {
       setBusy(false);
     }
   };
+
+  const signing = status === 'authenticating' || busy;
 
   return (
     <div style={card}>
@@ -96,7 +122,11 @@ export function ConsentScreen({ appId, appName, subject }: ConsentScreenProps) {
         Subject: {subject}
       </div>
 
-      {decision === 'granted' ? (
+      {wrongAddress ? (
+        <div role="status" style={{ color: '#8a2b2b', fontWeight: 600, fontSize: 14 }}>
+          You are signed in as a different address. Switch wallets to manage this subject.
+        </div>
+      ) : decision === 'granted' ? (
         <div role="status" style={{ color: '#0f7b3f', fontWeight: 600, fontSize: 14 }}>
           ✓ Access granted to {appName}. You can revoke it below at any time.
         </div>
@@ -105,14 +135,27 @@ export function ConsentScreen({ appId, appName, subject }: ConsentScreenProps) {
           Access denied. {appName} cannot read your data.
         </div>
       ) : (
-        <div style={{ display: 'flex', gap: 12 }}>
-          <button style={button('primary')} onClick={allow} disabled={busy}>
-            Allow
-          </button>
-          <button style={button('ghost')} onClick={() => setDecision('denied')} disabled={busy}>
-            Deny
-          </button>
-        </div>
+        <>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button style={button('primary')} onClick={allow} disabled={signing}>
+              {signing ? 'Waiting for wallet…' : isAuthenticated ? 'Allow' : 'Sign to allow'}
+            </button>
+            <button style={button('ghost')} onClick={() => setDecision('denied')} disabled={signing}>
+              Deny
+            </button>
+          </div>
+          {!isAuthenticated && (
+            <p style={{ fontSize: 12, color: '#8a93a0', margin: '10px 0 0' }}>
+              You will be asked to sign a message proving you own this address. It does not move funds.
+            </p>
+          )}
+        </>
+      )}
+
+      {error && (
+        <p role="alert" style={errorText}>
+          {error}
+        </p>
       )}
 
       <div style={{ marginTop: 24, borderTop: '1px solid #eef0f3', paddingTop: 16 }}>
