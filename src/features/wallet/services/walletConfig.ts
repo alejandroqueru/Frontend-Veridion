@@ -35,12 +35,15 @@ export async function initializeWalletKit() {
 /**
  * Connect to wallet with error handling
  */
+/** The slice of the wallet-kit surface that connecting needs. */
+export interface WalletConnectionKit {
+  openModal: (options: { onWalletSelected: (option: { id: string; name: string }) => Promise<void> }) => Promise<void>;
+  setWallet: (id: string) => void;
+  getAddress: () => Promise<{ address: string }>;
+}
+
 export async function connectWallet(
-  kit: {
-    openModal: (options: { onWalletSelected: (option: { id: string; name: string }) => Promise<void> }) => Promise<void>;
-    setWallet: (id: string) => void;
-    getAddress: () => Promise<{ address: string }>;
-  },
+  kit: WalletConnectionKit,
   onWalletSelected: (publicKey: string, walletName: string, walletId: string) => void
 ): Promise<void> {
   try {

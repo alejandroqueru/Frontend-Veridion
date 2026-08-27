@@ -1,7 +1,7 @@
 "use client";
 
 import { SectionContainer } from "@/shared/components/section-container";
-import { BarChart3, AlertTriangle, ShieldCheck } from "lucide-react";
+import { BarChart3, AlertTriangle } from "lucide-react";
 import { useHumanScoreSummary, useScoreExplanation } from "@/features/scoring/hooks";
 import { useReviewStore } from "@/features/review/store/review-store";
 import { ContributionBreakdown, VerificationHistoryTimeline, ScoreSimulator } from "@/features/scoring/components";
@@ -9,13 +9,12 @@ import { ScoreSummary } from "./overview/score-summary";
 import { CategoryBreakdown } from "./overview/category-breakdown";
 import { NextBestAction } from "./overview/next-best-action";
 import { RecentActivity } from "./overview/recent-activity";
-import Link from "next/link";
 
 export function DashboardOverview() {
   const summary = useHumanScoreSummary();
   const explanation = useScoreExplanation();
 
-  const { isAdmin, riskScore, setAdminMode, setRiskScore, getFlagStatusForAccount } = useReviewStore();
+  const { getFlagStatusForAccount } = useReviewStore();
   const flagStatus = getFlagStatusForAccount('current-user');
 
   return (

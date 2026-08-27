@@ -21,6 +21,21 @@ const eslintConfig = [
       "tailwind.config.js",
     ],
   },
+  {
+    rules: {
+      // A leading underscore is this codebase's existing marker for "declared
+      // on purpose, deliberately unused" — an omitted prop, a parameter kept
+      // for API shape. Honoring it lets the rule stay on for real mistakes.
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+        },
+      ],
+    },
+  },
 ];
 
 export default eslintConfig;

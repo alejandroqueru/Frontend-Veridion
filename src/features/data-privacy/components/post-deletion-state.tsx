@@ -31,7 +31,7 @@ export function PostDeletionState() {
           Your data has been permanently erased
         </h2>
         <p className="text-sm text-amber-300/70 max-w-md leading-relaxed">
-          All verification records and identity data have been removed from Veridion's
+          All verification records and identity data have been removed from Veridion&apos;s
           first-party stores. This account is now in a{' '}
           <span className="text-amber-300 font-medium">deleted state</span> — distinct from a
           new account that has never been verified.
